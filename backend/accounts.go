@@ -1002,7 +1002,7 @@ func (backend *Backend) createAndAddAccount(
 
 	// This function is passed as a callback to the BTC account constructor. It is called when the
 	// keystore needs to determine whether an address belongs to an account on its same keystore.
-	getAddressByIDCallback := func(coinCode coinpkg.Code, addressID addresses.AddressID) (*addresses.AccountAddress, error) {
+	getAddressByIDCallback := func(coinCode coinpkg.Code, addressID addresses.AddressID) (addresses.AccountAddress, error) {
 		accountsByKeystore, err := backend.AccountsByKeystore()
 		if err != nil {
 			return nil, err
