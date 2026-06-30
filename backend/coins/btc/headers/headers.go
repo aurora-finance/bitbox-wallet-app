@@ -113,6 +113,12 @@ type Headers struct {
 
 	closed bool
 
+	// paused is set by Pause and cleared by Resume. While paused the
+	// download loop is left running but issues no network calls (it
+	// returns early in downloadAndProcessBatch), so the goroutine and the
+	// headers DB stay resident for a cheap Resume. Guarded by lock.
+	paused bool
+
 	// Only for testing, must be nil in production.
 	testDownloadFinished func()
 }
@@ -209,7 +215,7 @@ func (headers *Headers) download() {
 
 	downloadAndProcessBatch := func() {
 		defer headers.lock.Lock()()
-		if headers.closed {
+		if headers.closed || headers.paused {
 			return
 		}
 		db := headers.db
@@ -495,6 +501,29 @@ func (headers *Headers) Status() (*Status, error) {
 		TargetHeight:  headers.targetHeight,
 		TipHashHex:    tipHashHex,
 	}, nil
+}
+
+// Pause stops the header download loop from issuing further network calls,
+// without tearing it down: the download goroutine and the headers DB stay
+// resident so Resume can restart syncing from the current tip. Used together
+// with the blockchain Pause when an app is backgrounded. Idempotent.
+func (headers *Headers) Pause() {
+	defer headers.lock.Lock()()
+	headers.paused = true
+}
+
+// Resume reverses Pause and kicks the download loop so it catches up from the
+// current tip to the chain head. On reconnect the blockchain layer also
+// replays the header subscription, so new tips arrive too. Idempotent; safe to
+// call when not paused.
+func (headers *Headers) Resume() {
+	unlock := headers.lock.Lock()
+	headers.paused = false
+	unlock()
+
+	// kick() is a non-blocking channel send and needs no lock; do it after
+	// releasing the lock so the woken download loop can re-acquire it.
+	headers.kick()
 }
 
 // Close shuts down the downloading goroutine and closes the database.

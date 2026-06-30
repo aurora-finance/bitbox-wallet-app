@@ -370,3 +370,36 @@ func (coin *Coin) Close() error {
 	}
 	return nil
 }
+
+// Pause releases the coin's network resources without tearing it down: it stops
+// the headers download loop and non-terminally disconnects the blockchain
+// (Electrum) backend, keeping all derived state resident so Resume is cheap.
+// Idempotent; a no-op before Initialize.
+func (coin *Coin) Pause() {
+	coin.log.Info("pausing coin")
+	if coin.headers != nil {
+		coin.headers.Pause()
+	}
+
+	// The production blockchain (the electrum failover client) implements
+	// Pause/Resume; test mocks may not, so we reach them through an
+	// optional interface rather than widening blockchain.Interface (which
+	// would force every implementer/mock to grow the methods).
+	if pausable, ok := coin.blockchain.(interface{ Pause() }); ok {
+		pausable.Pause()
+	}
+}
+
+// Resume reverses Pause: it reconnects the blockchain backend (which replays
+// all subscriptions and flips accounts back online via the connection-error
+// event) and restarts the headers download loop so it catches up to the tip.
+// Idempotent; a no-op when not paused.
+func (coin *Coin) Resume() {
+	coin.log.Info("resuming coin")
+	if resumable, ok := coin.blockchain.(interface{ Resume() }); ok {
+		resumable.Resume()
+	}
+	if coin.headers != nil {
+		coin.headers.Resume()
+	}
+}

@@ -25,6 +25,11 @@ import (
 // passed to `OnDisconnect()` if the connection was closed because the failover client was closed.
 var ErrClosed error = errors.New("closed")
 
+// ErrPaused is returned by `Call` and `Subscribe` while the failover client is paused (see
+// `Pause`). It is also passed to `OnDisconnect()` when the current client is closed by `Pause`.
+// Unlike ErrClosed it is not terminal: `Resume` reconnects the client and replays subscriptions.
+var ErrPaused error = errors.New("paused")
+
 // ErrNoServers is used when no servers are configured, so no connection can be established. It is
 // passed to `OnRetry()`.
 var ErrNoServers error = errors.New("No servers configured.")
@@ -123,7 +128,11 @@ type Failover[C Client] struct {
 
 	manualReconnect chan struct{}
 
-	closed   bool
+	closed bool
+	// paused is set by Pause and cleared by Resume. While paused, no new
+	// connection is established (establishConnection bails) so Call and
+	// Subscribe behave as disconnected until Resume. Guarded by closedMu.
+	paused   bool
 	closedMu sync.RWMutex
 
 	quitCh chan struct{}
@@ -156,7 +165,7 @@ func New[C Client](opts *Options[C]) *Failover[C] {
 
 // `mutex` write lock must be held when calling this function.
 func (f *Failover[C]) establishConnection() error {
-	for !f.isClosed() {
+	for !f.isClosed() && !f.isPaused() {
 		currentServerIndex := f.currentServerIndex
 		if f.enableRetry && currentServerIndex == f.startServerIndex {
 			retryTimeout := f.opts.retryTimeout()
@@ -214,6 +223,9 @@ func (f *Failover[C]) establishConnection() error {
 			go subscriptionMethod(currentClient, currentClientCounter)
 		}
 		return nil
+	}
+	if f.isPaused() {
+		return ErrPaused
 	}
 	return ErrClosed
 }
@@ -394,6 +406,12 @@ func (f *Failover[C]) isClosed() bool {
 	return f.closed
 }
 
+func (f *Failover[C]) isPaused() bool {
+	f.closedMu.RLock()
+	defer f.closedMu.RUnlock()
+	return f.paused
+}
+
 // ManualReconnect triggers a manual reconnect, non-blocking.
 // This re-tries connecting immediately without waiting for the retry timeout.
 // We we are not currently disconnected, this is a no-op.
@@ -424,4 +442,72 @@ func (f *Failover[C]) Close() {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	f.closeCurrentClient(ErrClosed)
+}
+
+// Pause closes the current client connection and stops the failover from
+// reconnecting, without permanently closing it (unlike Close). While paused,
+// `Call` and `Subscribe` behave as disconnected (they return ErrPaused). A
+// subsequent `Resume` reconnects and replays all subscriptions registered
+// before the pause. Pause is idempotent and a no-op on a closed client.
+//
+// This is the seam used to release the network (socket + read/ping goroutines)
+// while an app is backgrounded, keeping the failover object and its
+// subscription list resident so resuming is cheap.
+func (f *Failover[C]) Pause() {
+	pause := func() bool {
+		f.closedMu.Lock()
+		defer f.closedMu.Unlock()
+		if f.closed || f.paused {
+			return false
+		}
+		f.paused = true
+		return true
+	}()
+	if !pause {
+		return
+	}
+
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.closeCurrentClient(ErrPaused)
+}
+
+// Resume reverses Pause: it clears the paused state and reconnects in the
+// background, replaying every subscription that was registered before the
+// pause. Resume is idempotent, a no-op on a client that is not paused, and a
+// no-op on a closed client.
+func (f *Failover[C]) Resume() {
+	resume := func() bool {
+		f.closedMu.Lock()
+		defer f.closedMu.Unlock()
+		if f.closed || !f.paused {
+			return false
+		}
+		f.paused = false
+		return true
+	}()
+	if !resume {
+		return
+	}
+
+	// Reconnect in the background so Resume doesn't block on the connection
+	// attempt, which retries every server with a backoff if they are all
+	// down. establishConnection replays the existing subscriptions on the
+	// newly connected client, so no per-subscription work is needed here.
+	go func() {
+		f.mutex.Lock()
+		defer f.mutex.Unlock()
+
+		// Bail if we were closed/paused again in the meantime, or if
+		// another caller (e.g. an in-flight Call) already reconnected.
+		if f.isClosed() || f.isPaused() || f.currentClient != nil {
+			return
+		}
+
+		// Reconnect immediately from the starting server without waiting
+		// for the retry timeout.
+		f.enableRetry = false
+		f.currentServerIndex = f.startServerIndex
+		_ = f.establishConnection()
+	}()
 }

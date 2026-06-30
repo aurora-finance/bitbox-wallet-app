@@ -10,7 +10,7 @@ github.com/BitBoxSwiss/bitbox02-api-go/communication/u2fhid/hiddevice
 github.com/BitBoxSwiss/bitbox02-api-go/util/errp
 github.com/BitBoxSwiss/bitbox02-api-go/util/semver
 github.com/BitBoxSwiss/bitbox02-api-go/util/sleep
-# github.com/BitBoxSwiss/block-client-go v0.0.0-20250813114605-c276f6470c3d
+# github.com/BitBoxSwiss/block-client-go v0.0.0-20250813114605-c276f6470c3d => github.com/thalia-finance/block-client-go v0.0.0-20260630084957-43366128a74f
 ## explicit; go 1.19
 github.com/BitBoxSwiss/block-client-go/electrum
 github.com/BitBoxSwiss/block-client-go/electrum/types
@@ -402,3 +402,4 @@ google.golang.org/protobuf/types/known/emptypb
 ## explicit
 gopkg.in/yaml.v3
 # github.com/BitBoxSwiss/bitbox02-api-go => github.com/thalia-finance/bitbox02-api-go v0.0.0-20260901052923-ca0709f18f3d
+# github.com/BitBoxSwiss/block-client-go => github.com/thalia-finance/block-client-go v0.0.0-20260630084957-43366128a74f

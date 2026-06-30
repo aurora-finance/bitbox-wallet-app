@@ -1,7 +1,5 @@
 github.com/BitBoxSwiss/bitboxsync-client-go v0.0.0-20260701061324-f7e835814680 h1:yGUYDddOzTmUdyBUX4FDGUW+O3VX2g2OfjtdZGIuRZ4=
 github.com/BitBoxSwiss/bitboxsync-client-go v0.0.0-20260701061324-f7e835814680/go.mod h1:NlTH3nCt38trIQH357yq7ugzI61WbZ+SFeq6B0bK/EU=
-github.com/BitBoxSwiss/block-client-go v0.0.0-20250813114605-c276f6470c3d h1:HdoIlaUcNyEBajUoQgsxZtDMyCFyE7qv1kpeFe/u7nQ=
-github.com/BitBoxSwiss/block-client-go v0.0.0-20250813114605-c276f6470c3d/go.mod h1:SJTiQZU9ggBzVKMni97rpNS9GddPKErndFXNSDrfEGc=
 github.com/DataDog/zstd v1.4.5 h1:EndNeuB0l9syBZhut0wns3gV1hL8zX8LIu6ZiVHWLIQ=
 github.com/DataDog/zstd v1.4.5/go.mod h1:1jcaCB/ufaK+sKp1NBhlGmpz41jOoPQ35bpF36t7BBo=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
@@ -227,6 +225,8 @@ github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 h1:epCh84lMvA70
 github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7/go.mod h1:q4W45IWZaF22tdD+VEXcAWRA037jwmWEB5VWYORlTpc=
 github.com/thalia-finance/bitbox02-api-go v0.0.0-20260901052923-ca0709f18f3d h1:IpQ6iQEaVTV7IQNtrpUHmi2hCmWuFk4nTjyvkGjWYig=
 github.com/thalia-finance/bitbox02-api-go v0.0.0-20260901052923-ca0709f18f3d/go.mod h1:WecGvMKpH5eEqW7xgASQF4eg/dmyueh4sE7Td6aKMVs=
+github.com/thalia-finance/block-client-go v0.0.0-20260630084957-43366128a74f h1:sQiOGOwnxGUqKYab/fpyB161aIIlhNO9TR1aJ121LJc=
+github.com/thalia-finance/block-client-go v0.0.0-20260630084957-43366128a74f/go.mod h1:SJTiQZU9ggBzVKMni97rpNS9GddPKErndFXNSDrfEGc=
 github.com/tklauser/go-sysconf v0.3.14 h1:g5vzr9iPFFz24v2KZXs/pvpvh8/V9Fw6vQK5ZZb78yU=
 github.com/tklauser/go-sysconf v0.3.14/go.mod h1:1ym4lWMLUOhuBOPGtRcJm7tEGX4SCYNEEEtghGG/8uY=
 github.com/tklauser/numcpus v0.8.0 h1:Mx4Wwe/FjZLeQsK/6kt2EOepwwSl7SmJrK5bV/dXYgY=

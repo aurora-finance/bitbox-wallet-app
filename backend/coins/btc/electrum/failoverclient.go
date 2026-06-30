@@ -148,6 +148,24 @@ func (f *failoverClient) ManualReconnect() {
 	f.failover.ManualReconnect()
 }
 
+// Pause non-terminally tears down the Electrum connection: it drops the socket
+// and stops the read/ping/reconnect goroutines, but keeps the failover object
+// and its subscription list resident so Resume can reconnect cheaply. It also
+// publishes the paused state as a connection error so accounts flip offline via
+// the existing onConnectionStatusChanged wiring. Idempotent.
+func (f *failoverClient) Pause() {
+	f.failover.Pause()
+	f.setConnectionError(failover.ErrPaused)
+}
+
+// Resume reconnects after a Pause. The failover replays all previously
+// registered subscriptions on the new connection, and its OnConnect callback
+// clears the connection error (setConnectionError(nil)), which flips accounts
+// back online and triggers their re-sync. Idempotent; a no-op when not paused.
+func (f *failoverClient) Resume() {
+	f.failover.Resume()
+}
+
 func (f *failoverClient) Close() {
 	f.failover.Close()
 }

@@ -76,4 +76,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/BitBoxSwiss/bitbox02-api-go => github.com/thalia-finance/bitbox02-api-go v0.0.0-20260901052923-ca0709f18f3d
+replace (
+	github.com/BitBoxSwiss/bitbox02-api-go => github.com/thalia-finance/bitbox02-api-go v0.0.0-20260901052923-ca0709f18f3d
+	github.com/BitBoxSwiss/block-client-go => github.com/thalia-finance/block-client-go v0.0.0-20260630084957-43366128a74f
+)
