@@ -524,6 +524,41 @@ func (account *Account) Close() {
 	})
 }
 
+// Pause quiesces the account for a backgrounded app without tearing it
+// down, so a later Resume is cheap. It shuts the ScriptHashSubscribe
+// gate so no new onAddressStatus goroutines spawn, then drains the ones
+// already in flight. The blockchain connection must still be open here
+// (the caller disconnects it only after Pause returns): draining while
+// Electrum is up lets those goroutines finish their getTransactionCached
+// network calls normally, rather than racing the disconnect and
+// panicking out of the host process. Unlike Close, Pause is
+// non-terminal: transactions, db and the derived address chains stay
+// resident, and Resume reopens the gate.
+func (account *Account) Pause() {
+	// Same gate + drain as Close, minus marking the account closed, so
+	// the in-flight goroutines run to completion (Electrum is still up)
+	// instead of bailing at their isClosed() guards.
+	account.subscriptionMu.Lock()
+	account.subscriptionsClosed = true
+	account.subscriptionMu.Unlock()
+
+	// Pause never takes initializedLock, so this Wait can't deadlock
+	// against an in-flight goroutine's isClosed() read lock -- the
+	// hazard Close() documents when it drops the write lock first.
+	account.subscriptionsWG.Wait()
+}
+
+// Resume reopens the ScriptHashSubscribe gate closed by Pause, so the
+// subscription replay a reconnect triggers can drive a re-sync again. It
+// must run before the blockchain client replays subscriptions on
+// reconnect; a callback that fires while the gate is still closed is
+// dropped, and the account never re-syncs.
+func (account *Account) Resume() {
+	account.subscriptionMu.Lock()
+	account.subscriptionsClosed = false
+	account.subscriptionMu.Unlock()
+}
+
 func (account *Account) isClosed() bool {
 	defer account.initializedLock.RLock()()
 	return account.closed
