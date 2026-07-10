@@ -134,7 +134,9 @@ func (s *transactionsSuite) updateAddressHistory(
 		s.notifierMock.On("Put", tx.TXHash[:]).Return(nil).Once()
 	}
 
-	s.Require().NoError(s.transactions.UpdateAddressHistory(address.PubkeyScriptHashHex(), txs))
+	s.Require().NoError(
+		s.transactions.UpdateAddressHistory(address.PubkeyScriptHashHex(), txs),
+	)
 }
 
 func newTx(

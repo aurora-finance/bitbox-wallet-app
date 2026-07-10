@@ -773,7 +773,13 @@ func (account *Account) onAddressStatus(address addresses.AccountAddress, status
 		return
 	}
 
-	if err := account.transactions.UpdateAddressHistory(address.PubkeyScriptHashHex(), history); err != nil {
+	// A recoverable failure here (notably a TransactionGet that raced a
+	// pause/disconnect and returned ErrPaused) is reported like the other
+	// sync errors instead of panicking the process; the account recovers on
+	// the next reconnect + subscription replay.
+	if err := account.transactions.UpdateAddressHistory(
+		address.PubkeyScriptHashHex(), history,
+	); err != nil {
 		account.reportFatalSyncError(err, "UpdateAddressHistory failed")
 		return
 	}

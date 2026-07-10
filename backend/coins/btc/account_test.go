@@ -117,6 +117,98 @@ func TestAccount(t *testing.T) {
 	require.Equal(t, []*SpendableOutput{}, spendableOutputs)
 }
 
+// TestAccountPauseResume stages an onAddressStatus goroutine mid-flight (as if a
+// sync burst were running when the app is backgrounded) and asserts that Pause
+// drains it before returning — the invariant that keeps a later Electrum
+// disconnect from landing inside getTransactionCached and panicking the process.
+// It then checks the subscription gate: while paused no new work spawns, and
+// Resume reopens the gate so a replayed subscription drives a re-sync again.
+func TestAccountPauseResume(t *testing.T) {
+	account := mockAccount(t, nil)
+	t.Cleanup(account.Close)
+
+	// Bring up the mock blockchain so we can drive its callbacks. Initialize is
+	// idempotent (coin.initOnce), so account.Initialize() below reuses it.
+	account.coin.Initialize()
+	blockchainMock := account.coin.Blockchain().(*blockchainMock.BlockchainMock)
+
+	// Capture the ScriptHashSubscribe callbacks instead of auto-firing them, so
+	// the test controls exactly when an onAddressStatus goroutine spawns.
+	var mu sync.Mutex
+	var callbacks []func(string)
+	blockchainMock.MockScriptHashSubscribe = func(
+		_ func() func(), _ blockchain.ScriptHashHex, success func(string)) {
+		mu.Lock()
+		defer mu.Unlock()
+		callbacks = append(callbacks, success)
+	}
+
+	// ScriptHashGetHistory blocks until released, holding an onAddressStatus
+	// goroutine in flight (a stand-in for the getTransactionCached network call
+	// the real race blocks on). It returns an empty history so the goroutine
+	// finishes cleanly once released.
+	release := make(chan struct{})
+	var getHistoryCalls atomic.Int32
+	blockchainMock.MockScriptHashGetHistory = func(
+		blockchain.ScriptHashHex) (blockchain.TxHistory, error) {
+		getHistoryCalls.Add(1)
+		<-release
+		return blockchain.TxHistory{}, nil
+	}
+
+	require.NoError(t, account.Initialize())
+	callback := func(i int) func(string) {
+		mu.Lock()
+		defer mu.Unlock()
+		return callbacks[i]
+	}
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(callbacks) >= 3
+	}, time.Second, time.Millisecond)
+
+	// Fire one subscription: spawns an onAddressStatus goroutine that blocks in
+	// ScriptHashGetHistory, tracked by the account's subscriptionsWG.
+	callback(0)("status-changed")
+	require.Eventually(t, func() bool { return getHistoryCalls.Load() == 1 },
+		time.Second, time.Millisecond)
+
+	// Pause must block until that in-flight goroutine drains. While
+	// ScriptHashGetHistory is still blocked, Pause is waiting.
+	paused := make(chan struct{})
+	go func() {
+		account.Pause()
+		close(paused)
+	}()
+	select {
+	case <-paused:
+		t.Fatal("Pause returned before the in-flight subscription drained")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Release the blockchain call (it completed while Electrum was still up).
+	// Pause now drains and returns; no panic.
+	close(release)
+	select {
+	case <-paused:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Pause did not return after the subscription drained")
+	}
+
+	// Gate is shut: a subscription callback that fires while paused is dropped,
+	// spawning no new onAddressStatus goroutine.
+	callback(1)("status-changed")
+	require.Never(t, func() bool { return getHistoryCalls.Load() != 1 },
+		100*time.Millisecond, 10*time.Millisecond)
+
+	// Resume reopens the gate: a replayed subscription drives work again.
+	account.Resume()
+	callback(2)("status-changed")
+	require.Eventually(t, func() bool { return getHistoryCalls.Load() == 2 },
+		time.Second, time.Millisecond)
+}
+
 func TestReusedAddresses(t *testing.T) {
 	script1 := []byte{0x01}
 	script2 := []byte{0x02}

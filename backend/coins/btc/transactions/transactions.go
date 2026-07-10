@@ -68,7 +68,9 @@ type Interface interface {
 
 	// UpdateAddressHistory should be called when initializing a wallet address, or when the history of
 	// an address changes (a new transaction that touches it appears or disappears). The transactions
-	// are downloaded and indexed.
+	// are downloaded and indexed. It returns an error (rather than panicking) on a recoverable
+	// failure such as a network read that races a pause/disconnect, so the caller can bail its sync
+	// gracefully.
 	UpdateAddressHistory(scriptHashHex blockchain.ScriptHashHex, txs []*blockchain.TxInfo) error
 }
 
@@ -485,6 +487,9 @@ func (transactions *Transactions) UpdateAddressHistory(scriptHashHex blockchain.
 			if err != nil {
 				return err
 			}
+			if err != nil {
+				return err
+			}
 			newlyConfirmed, err := transactions.processTxForAddress(
 				dbTx, scriptHashHex, txHash, tx, height, headerTimestamp,
 			)
@@ -522,7 +527,10 @@ func (transactions *Transactions) UpdateAddressHistory(scriptHashHex blockchain.
 	return nil
 }
 
-// getTransactionCached requires transactions lock.
+// getTransactionCached requires transactions lock. It returns an error instead
+// of panicking so a recoverable failure — notably a TransactionGet that races a
+// pause/disconnect and returns ErrPaused — bails the sync gracefully via
+// reportFatalSyncError rather than aborting the host process.
 func (transactions *Transactions) getTransactionCached(
 	dbTx DBTxInterface,
 	txHash chainhash.Hash,
