@@ -351,6 +351,14 @@ func (account *Account) Initialize() error {
 			account.ResetSynced()
 			account.SetOffline(nil)
 			account.minRelayFeeRate = nil
+			// A re-established connection is a fresh chance to sync, so
+			// clear any latched fatal sync error. Without this a
+			// transient error (a network drop while syncing) would keep
+			// Balance()/Transactions() erroring forever even after the
+			// connection recovers -- the account would appear dead until
+			// an app restart. If the failure is genuine it is re-set by
+			// the next reportFatalSyncError.
+			account.fatalError.Store(false)
 			account.log.Debug("Connection to blockchain backend established")
 		}
 	}
@@ -557,6 +565,17 @@ func (account *Account) Resume() {
 	account.subscriptionMu.Lock()
 	account.subscriptionsClosed = false
 	account.subscriptionMu.Unlock()
+
+	// Clear any fatal sync error latched before the pause. fatalError is
+	// set on transient sync failures too (network drop, ErrPaused mid-
+	// flight) and is otherwise NEVER cleared, so without this a single
+	// blip while backgrounded would leave Balance()/Transactions()
+	// erroring for the whole process lifetime -- the account looks dead
+	// (funds invisible) until an app restart. Resume is the "reconnect
+	// and try again" signal, so a fresh sync attempt deserves a clean
+	// slate; if the underlying failure persists, the next sync re-sets
+	// the flag.
+	account.fatalError.Store(false)
 }
 
 func (account *Account) isClosed() bool {

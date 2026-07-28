@@ -632,6 +632,31 @@ func TestGetUsedAddressesFatalError(t *testing.T) {
 	require.EqualError(t, err, "can't call GetUsedAddresses() after a fatal error")
 }
 
+// TestResumeClearsFatalError is a regression test: a fatal sync error latched
+// during a pause (a transient network blip, ErrPaused) must be cleared by
+// Resume, so a backgrounded-then-foregrounded account is not left permanently
+// erroring on Balance()/Transactions()/GetUsedAddresses() until an app
+// restart. fatalError was previously never cleared anywhere.
+func TestResumeClearsFatalError(t *testing.T) {
+	account := mockUnifiedAccount(t)
+	account.fatalError.Store(true)
+
+	// Sanity: while set, the account rejects reads.
+	_, err := account.GetUsedAddresses()
+	require.Error(t, err)
+
+	account.Resume()
+
+	require.False(t, account.fatalError.Load(),
+		"Resume must clear a latched fatal sync error")
+
+	// And the read path recovers (mockUnifiedAccount has no addresses,
+	// so the result is empty, but crucially it no longer errors).
+	usedAddresses, err := account.GetUsedAddresses()
+	require.NoError(t, err)
+	require.Empty(t, usedAddresses)
+}
+
 func TestSignBTCMessageSupportsChangeAddress(t *testing.T) {
 	account := mockAccount(t, nil)
 	require.NoError(t, account.Initialize())
